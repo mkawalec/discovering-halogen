@@ -1,0 +1,20 @@
+{
+  "name": "todo",
+  "version": "0.1.0",
+  "description": "ToDo app in purescript",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "webpack": "./node_modules/.bin/webpack --colors --devtool eval --content-base src/ --progress --verbose"
+  },
+  "author": "Michal Kawalec",
+  "license": "GPL3",
+  "dependencies": {
+    "babel-core": "^5.6.3",
+    "babel-loader": "^5.1.4",
+    "node-libs-browser": "^0.5.2",
+    "purs-loader": "^0.2.1",
+    "uuid": "^2.0.1",
+    "virtual-dom": "^2.0.1",
+    "webpack": "^1.9.11"
+  }
+}
