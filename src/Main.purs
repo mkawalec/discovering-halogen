@@ -15,6 +15,7 @@ import Control.Functor (($>))
 import Control.Alternative
 import Control.Bind
 import Control.Monad.Eff
+import Control.Monad.Eff.Class (liftEff)
 import Control.Monad.Eff.Random
 import Control.Apply (lift2)
 
@@ -37,6 +38,7 @@ import qualified Halogen.HTML.Attributes as A
 import qualified Halogen.HTML.Events as A
 import qualified Halogen.HTML.Events.Forms as A
 import qualified Halogen.HTML.Events.Handler as E
+import qualified Halogen.HTML.Events.Monad as E
 import qualified Halogen.HTML.CSS as CSS
 
 import qualified Halogen.Themes.Bootstrap3 as B
@@ -63,7 +65,8 @@ newtype Task = Task { uuid :: String, description :: String, completed :: Boolea
 -- | The state of the application
 data State = State [Task]
 
-type EffectfulInput = forall eff. Eff (random :: Random | eff) Input
+type AppEvent e = E.Event (HalogenEffects (random :: Random | e))
+type AppHTML e = H.HTML (AppEvent e Input)
 
 -- | Inputs to the state machine
 data Input
@@ -81,19 +84,16 @@ instance inputSupportsUndoRedo :: Undo.SupportsUndoRedo Input where
   toUndoRedo Redo = Just Undo.Redo
   toUndoRedo _ = Nothing
 
-getNewTask :: EffectfulInput
+getNewTask :: forall e. AppEvent e Input
 getNewTask = do
-  uuid <- getUuid
+  uuid <- liftEff $ getUuid
   return $ NewTask uuid Nothing
 
-superLift :: forall a. (a -> Input) -> a -> EffectfulInput
-superLift input params = return $ input params
-
 -- | The view is a state machine, consuming inputs, and generating HTML documents which in turn, generate new inputs
-ui :: forall m. (Alternative m) => Component m EffectfulInput EffectfulInput
+ui :: forall e. Component (AppEvent e) Input Input
 ui = render <$> stateful (Undo.undoRedoState (State [])) (Undo.withUndoRedo update)
   where
-  render :: Undo.UndoRedoState State -> H.HTML (m EffectfulInput)
+  render :: Undo.UndoRedoState State -> AppHTML e
   render st =
     case Undo.getState st of
       State ts ->
@@ -103,28 +103,28 @@ ui = render <$> stateful (Undo.undoRedoState (State [])) (Undo.withUndoRedo upda
               , H.div_ (zipWith task ts (0 .. length ts))
               ]
 
-  toolbar :: forall st. Undo.UndoRedoState st -> H.HTML (m EffectfulInput)
+  toolbar :: forall st. Undo.UndoRedoState st -> AppHTML e
   toolbar st = H.p [ A.class_ B.btnGroup ]
                    [ H.button [ A.classes [ B.btn, B.btnPrimary ]
-                              , A.onClick (A.input_ getNewTask)
+                              , A.onClick (\_ -> pure $ getNewTask)
                               ]
                               [ H.text "New Task" ]
                    , H.button [ A.class_ B.btn
                               , A.enabled (Undo.canUndo st)
-                              , A.onClick (A.input_ $ return Undo)
+                              , A.onClick (A.input_ $ Undo)
                               ]
                               [ H.text "Undo" ]
                    , H.button [ A.class_ B.btn
                               , A.enabled (Undo.canRedo st)
-                              , A.onClick (A.input_ $ return Redo)
+                              , A.onClick (A.input_ $ Redo)
                               ]
                               [ H.text "Redo" ]
                    ]
 
-  task :: Task -> Number -> H.HTML (m EffectfulInput)
+  task :: Task -> Number -> AppHTML e
   task (Task task) index = H.p_ <<<  pure $
-    (H.span [ A.value task.uuid 
-            ] 
+    (H.span [ A.value task.uuid
+            ]
             [
               H.text task.uuid
             , BI.inputGroup
@@ -133,31 +133,31 @@ ui = render <$> stateful (Undo.undoRedoState (State [])) (Undo.withUndoRedo upda
                            , A.type_ "checkbox"
                            , A.checked task.completed
                            , A.title "Mark as completed"
-                           , A.onChecked (A.input $ superLift (MarkCompleted index))
+                           , A.onChecked (A.input $ MarkCompleted index)
                            ]
                            [])))
                 (H.input [ A.classes [ B.formControl ]
                          , A.placeholder "Description"
-                         , A.onValueChanged (A.input $ superLift (UpdateDescription index))
+                         , A.onValueChanged (A.input $ UpdateDescription index)
                          , A.value task.description
                          ]
                          [])
                 (Just (BI.ButtonAddOn
                   (H.button [ A.classes [ B.btn, B.btnDefault ]
                             , A.title "Remove task"
-                            , A.onClick (A.input_ $ return $ RemoveTask index)
+                            , A.onClick (A.input_ $ RemoveTask index)
                               ]
                               [ H.text "✖" ])))
                   ])
 
   update :: State -> Input -> State
-  update (State ts) (NewTask uuid s) = 
+  update (State ts) (NewTask uuid s) =
     State (ts ++ [Task { uuid: uuid, description: fromMaybe "" s, completed: false }])
-  update (State ts) (UpdateDescription i description) = 
+  update (State ts) (UpdateDescription i description) =
     State $ modifyAt i (\(Task t) -> Task (t { description = description })) ts
-  update (State ts) (MarkCompleted i completed) = 
+  update (State ts) (MarkCompleted i completed) =
     State $ modifyAt i (\(Task t) -> Task (t { completed = not completed })) ts
-  update (State ts) (RemoveTask i) = 
+  update (State ts) (RemoveTask i) =
     State $ deleteAt i 1 ts
 
 main = do

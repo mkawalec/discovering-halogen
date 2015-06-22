@@ -14,6 +14,7 @@
     "purescript-halogen": "master",
     "purescript-halogen-bootstrap": "master",
     "purescript-maps": "~0.3.4",
-    "purescript-transformers": "~0.5.5"
+    "purescript-transformers": "~0.5.5",
+    "purescript-random": "~0.1.3"
   }
 }
